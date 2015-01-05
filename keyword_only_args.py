@@ -11,7 +11,7 @@ import functools
 import inspect
 
 
-def keyword_only_args(*included_keywords):
+def decorator_closure(*included_keywords):
     """Transforms a function with keyword arguments into one with
     keyword-only arguments.
 
