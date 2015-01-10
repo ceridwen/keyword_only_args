@@ -34,3 +34,7 @@ def f(a, b, c='c', d='d', *args, **kws):
 ````
 
 This will make c and d keyword-only.
+
+## License
+
+MIT.
