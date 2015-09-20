@@ -12,7 +12,10 @@ import inspect
 
 # This is a placeholder object to distinguish parameters without
 # defaults from parameters have None as their default.
-no_default = object()
+class NoDefault:
+    def __repr__(self):
+        return 'NoDefault'
+no_default = NoDefault()
 
 
 def decorator_factory(*kw_only_parameters):
@@ -47,14 +50,18 @@ def decorator_factory(*kw_only_parameters):
         """
         # Each Python 3 argument has two independent properties: it is
         # positional-and-keyword *or* keyword-only, and it has a
-        # default or it doesn't.
+        # default value or it doesn't.
         names, _, _, defaults = inspect.getargspec(wrapped)
+        # If there are no default values getargpsec() returns None
+        # rather than an empty iterable for some reason.
+        if defaults is None:
+            defaults = ()
         names_with_defaults = frozenset(names[len(names) - len(defaults):])
         names_defaults = list(zip_longest(reversed(names), reversed(defaults),
                                          fillvalue=no_default))
         names_defaults.reverse()
         names_defaults = tuple(names_defaults)
-        print(names_defaults)
+        # print(names_defaults)
         names = frozenset(names)
         if kw_only_parameters:
             kw_only_names = frozenset(kw_only_parameters)
@@ -81,20 +88,25 @@ def decorator_factory(*kw_only_parameters):
             kw_names = frozenset(kws)
             # The keyword-only parameters that are bound to either an
             # passed-in argument or a default.
-            bound_kw_only_names = kw_names | names_with_defaults
-            # print('\n', bound_kw_only_names)
+            bound_kw_names = kw_names | names_with_defaults
+            # print('\n', bound_kw_names)
+
+            # Are there the right number of positional arguments?
+            if len(args) != len(names - bound_kw_names):
+                raise TypeError('%s() takes %d positional arguments but %d was given' % (wrapped.__name__, len(names) - len(bound_kw_names), len(args)))
 
             # Are all the keyword-only parameters covered either by a
             # passed argument or a default?
-            if not kw_only_names <= bound_kw_only_names:
+            if not kw_only_names <= bound_kw_names:
                 _wrong_args(wrapped, names_defaults, 
-                           kw_only_names - bound_kw_only_names,
+                           kw_only_names - bound_kw_names,
                            'keyword-only')
+
             # Are there enough positional args to cover all the
             # arguments not covered by a passed argument or a default?
-            if len(args) < len(names - bound_kw_only_names):
+            if len(args) < len(names - bound_kw_names):
                 _wrong_args(wrapped, names_defaults,
-                           names - bound_kw_only_names,
+                           names - bound_kw_names,
                            'positional', len(args))
 
             args = list(args)
