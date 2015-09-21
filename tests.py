@@ -14,12 +14,17 @@ from keyword_only_args import decorator_factory as keyword_only_args, no_default
 
 @strategies.composite
 def parameters(draw):
+    # I'm not testing the robustness of Python's argument handling, so
+    # my primary concern is generating human-readable parameter names
+    # that can't possibly be Python keywords.  Python has a limit of
+    # 255 on the number of arguments to a function.
     positional_or_kw = draw(strategies.sets(strategies.text(
         alphabet=string.ascii_letters, min_size=1, max_size=3).map(
-            lambda s: ''.join(s) + '_')))
+            lambda s: ''.join(s) + '_'), max_size=255))
     kw_only = draw(strategies.sets(strategies.text(
         alphabet=string.ascii_letters, min_size=1).map(
-            lambda s: ''.join(s) + '_'), min_size=1))
+            lambda s: ''.join(s) + '_'), min_size=1,
+                                   max_size=255-len(positional_or_kw)))
     intersection = positional_or_kw & kw_only
     positional_or_kw = frozenset(positional_or_kw - intersection)
     kw_only = frozenset(kw_only - intersection)
@@ -48,7 +53,10 @@ def native_func(parameters, args, kws):
             code.append(name)
     if args:
         code.append('*args')
-        return_code += ', args'
+        if return_code:
+            return_code += ', args'
+        else:
+            return_code += 'args'
     elif kw_only:
         code.append('*')
     for name in reversed(kw_only):
@@ -59,7 +67,10 @@ def native_func(parameters, args, kws):
             code.append(name)
     if kws:
         code.append('**kws')
-        return_code += ', kws'
+        if return_code:
+            return_code += ', kws'
+        else:
+            return_code += 'kws'
     namespace = {}
     print('def f(%s): return %s' % (', '.join(code), return_code))
     exec('def f(%s): return %s' % (', '.join(code), return_code), namespace)
@@ -74,7 +85,7 @@ def decorated_func(parameters, args, kws):
     no_defaults = []
     return_code = ', '.join(
         itertools.chain(reversed(positional_or_kw), reversed(kw_only)))
-    for name in itertools.chain(positional_or_kw, kw_only):
+    for name in itertools.chain(reversed(positional_or_kw), reversed(kw_only)):
         try:
             default = positional_or_kw[name]
         except KeyError:
@@ -86,10 +97,16 @@ def decorated_func(parameters, args, kws):
     code = no_defaults + defaults
     if args:
         code.append('*args')
-        return_code += ', args'
+        if return_code:
+            return_code += ', args'
+        else:
+            return_code += 'args'
     if kws:
         code.append('**kws')
-        return_code += ', kws'
+        if return_code:
+            return_code += ', kws'
+        else:
+            return_code += 'kws'
     namespace = {}
     exec('def f(%s): return %s' % (', '.join(code), return_code), namespace)
     return keyword_only_args(*kw_only)(namespace['f'])
@@ -106,16 +123,16 @@ def generate_parameters(draw):
     if kw_only:
         kws = draw(strategies.dictionaries(
             keys=strategies.sampled_from(kw_only),
-            values=strategies.text(),
+            values=strategies.text(min_size=1),
             average_size=len(kw_only)))
     else:
         kws = {}
     if positional_or_kw:
         kws.update(draw(strategies.dictionaries(
             keys=strategies.sampled_from(positional_or_kw),
-            values=strategies.text())))
+            values=strategies.text(min_size=1))))
     args = draw(strategies.lists(
-        strategies.text(),
+        strategies.text(min_size=1),
         average_size=max(1, len(positional_or_kw) + len(kw_only) - len(kws))))
     return args, kws, positional_or_kw, kw_only, varargs, varkw
 

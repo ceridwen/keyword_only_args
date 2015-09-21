@@ -11,8 +11,8 @@ import functools
 import inspect
 
 # This is a placeholder object to distinguish parameters without
-# defaults from parameters have None as their default.
-class NoDefault:
+# defaults from parameters that have None as their default.
+class NoDefault(object):
     def __repr__(self):
         return 'NoDefault'
 no_default = NoDefault()
@@ -48,20 +48,21 @@ def decorator_factory(*kw_only_parameters):
           A function wrapped so that it has keyword-only arguments.
 
         """
+
         # Each Python 3 argument has two independent properties: it is
         # positional-and-keyword *or* keyword-only, and it has a
         # default value or it doesn't.
-        names, _, _, defaults = inspect.getargspec(wrapped)
+        names, varargs, _, defaults = inspect.getargspec(wrapped)
+
         # If there are no default values getargpsec() returns None
         # rather than an empty iterable for some reason.
         if defaults is None:
             defaults = ()
         names_with_defaults = frozenset(names[len(names) - len(defaults):])
-        names_defaults = list(zip_longest(reversed(names), reversed(defaults),
+        parameters = list(zip_longest(reversed(names), reversed(defaults),
                                          fillvalue=no_default))
-        names_defaults.reverse()
-        names_defaults = tuple(names_defaults)
-        # print(names_defaults)
+        parameters.reverse()
+        parameters = tuple(parameters)
         names = frozenset(names)
         if kw_only_parameters:
             kw_only_names = frozenset(kw_only_parameters)
@@ -71,7 +72,7 @@ def decorator_factory(*kw_only_parameters):
         @functools.wraps(wrapped)
         def wrapper(*args, **kws):
             """Wrapper function, checks arguments with set operations, moves args
-            from *args into **kws, and then calls wrapped().
+            from **kws into *args, and then calls wrapped().
 
             Args:
               *args, **kws: The arguments passed to the original function.
@@ -85,45 +86,59 @@ def decorator_factory(*kw_only_parameters):
                 and expected arguments.
 
             """
-            kw_names = frozenset(kws)
+
             # The keyword-only parameters that are bound to either an
             # passed-in argument or a default.
-            bound_kw_names = kw_names | names_with_defaults
-            # print('\n', bound_kw_names)
+            bound_kw_names = frozenset(kws) | names_with_defaults
 
-            # Are there the right number of positional arguments?
-            if len(args) != len(names - bound_kw_names):
-                raise TypeError('%s() takes %d positional arguments but %d was given' % (wrapped.__name__, len(names) - len(bound_kw_names), len(args)))
-
-            # Are all the keyword-only parameters covered either by a
-            # passed argument or a default?
-            if not kw_only_names <= bound_kw_names:
-                _wrong_args(wrapped, names_defaults, 
-                           kw_only_names - bound_kw_names,
-                           'keyword-only')
-
-            # Are there enough positional args to cover all the
-            # arguments not covered by a passed argument or a default?
-            if len(args) < len(names - bound_kw_names):
-                _wrong_args(wrapped, names_defaults,
-                           names - bound_kw_names,
-                           'positional', len(args))
-
+            new_args = []
             args = list(args)
-            # The set of names bound to keyword arguments.
-            bound_kw_names = kw_names & names
-            for index, (name, default) in enumerate(names_defaults):
-                if name in kw_only_names or name in bound_kw_names:
-                    args.insert(index, kws.pop(name, default))
-            return wrapped(*args, **kws)
+            for name, default in parameters:
+                if name in kws:
+                    # Check first if there's a bound keyword for this name
+                    new_args.append(kws.pop(name))
+                elif name in kw_only_names:
+                    # If this name is keyword-only, check for a
+                    # default or raise.
+                    if default is not no_default:
+                        new_args.append(default)
+                    else:
+                        _wrong_args(wrapped, parameters, 
+                                    kw_only_names - bound_kw_names,
+                                    'keyword-only')
+                elif args:
+                    # Check for a positional arg.
+                    new_args.append(args.pop(0))
+                elif default is not no_default:
+                    # Check for a default value.
+                    new_args.append(default)
+                else:
+                    # No positional arg or default for this name so raise.
+                    _wrong_args(wrapped, parameters,
+                                names - bound_kw_names,
+                                'positional', len(args))
+
+            if args and not varargs:
+                # Too many positional arguments and no varargs, so
+                # raise after subtracting off the number of kw-only
+                # arguments from those expected.
+                raise TypeError(
+                    '%s() takes %d positional arguments but %d were given' %
+                    (wrapped.__name__, len(names) - len(bound_kw_names),
+                     len(new_args)))
+            else:
+                # Pass the rest of the positional args
+                new_args.extend(args)
+
+            return wrapped(*new_args, **kws)
         return wrapper
 
     return decorator
 
 
-def _wrong_args(wrapped, names_defaults, missing_args, arg_type, number_of_args=0):
+def _wrong_args(wrapped, parameters, missing_args, arg_type, number_of_args=0):
     """ Raise Python 3-style TypeErrors for missing arguments."""
-    ordered_args = [a for a, _ in names_defaults if a in missing_args]
+    ordered_args = [a for a, _ in parameters if a in missing_args]
     ordered_args = ordered_args[number_of_args:]
     error_message = ['%s() missing %d required %s argument' % 
                      (wrapped.__name__, len(ordered_args), arg_type)]
