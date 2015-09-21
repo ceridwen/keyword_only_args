@@ -2,13 +2,13 @@
 
 from __future__ import print_function
 
+import functools
+import inspect
+
 try:
     from itertools import zip_longest
 except ImportError:
     from itertools import izip_longest as zip_longest
-
-import functools
-import inspect
 
 # This is a placeholder object to distinguish parameters without
 # defaults from parameters that have None as their default.
@@ -87,12 +87,8 @@ def decorator_factory(*kw_only_parameters):
 
             """
 
-            # The keyword-only parameters that are bound to either an
-            # passed-in argument or a default.
-            bound_kw_names = frozenset(kws) | names_with_defaults
-
             new_args = []
-            args = list(args)
+            args_index = 0
             for name, default in parameters:
                 if name in kws:
                     # Check first if there's a bound keyword for this name
@@ -104,31 +100,34 @@ def decorator_factory(*kw_only_parameters):
                         new_args.append(default)
                     else:
                         _wrong_args(wrapped, parameters, 
-                                    kw_only_names - bound_kw_names,
+                                    kw_only_names -
+                                    (names_with_defaults | frozenset(kws)),
                                     'keyword-only')
-                elif args:
+                elif args_index < len(args):
                     # Check for a positional arg.
-                    new_args.append(args.pop(0))
+                    new_args.append(args[args_index])
+                    args_index += 1
                 elif default is not no_default:
                     # Check for a default value.
                     new_args.append(default)
                 else:
                     # No positional arg or default for this name so raise.
                     _wrong_args(wrapped, parameters,
-                                names - bound_kw_names,
+                                names - (names_with_defaults | frozenset(kws)),
                                 'positional', len(args))
 
-            if args and not varargs:
+            if args_index != len(args) and not varargs:
                 # Too many positional arguments and no varargs, so
                 # raise after subtracting off the number of kw-only
                 # arguments from those expected.
                 raise TypeError(
                     '%s() takes %d positional arguments but %d were given' %
-                    (wrapped.__name__, len(names) - len(bound_kw_names),
-                     len(new_args)))
+                    (wrapped.__name__,
+                     len(names) - len(names_with_defaults | frozenset(kws)),
+                     len(args)))
             else:
                 # Pass the rest of the positional args
-                new_args.extend(args)
+                new_args.extend(args[args_index:])
 
             return wrapped(*new_args, **kws)
         return wrapper
