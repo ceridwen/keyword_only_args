@@ -9,7 +9,9 @@ import hypothesis
 from hypothesis import strategy
 from hypothesis import strategies
 
-from keyword_only_args import decorator_factory as keyword_only_args, no_default
+from keyword_only_args import decorator_factory as keyword_only_args
+
+no_default = object()
 
 
 @strategies.composite

@@ -5,17 +5,7 @@ from __future__ import print_function
 import functools
 import inspect
 
-try:
-    from itertools import zip_longest
-except ImportError:
-    from itertools import izip_longest as zip_longest
-
-# This is a placeholder object to distinguish parameters without
-# defaults from parameters that have None as their default.
-class NoDefault(object):
-    def __repr__(self):
-        return 'NoDefault'
-no_default = NoDefault()
+import wrapt
 
 
 def decorator_factory(*kw_only_parameters):
@@ -37,7 +27,8 @@ def decorator_factory(*kw_only_parameters):
       arguments.
 
     """
-    def decorator(wrapped):
+    @wrapt.decorator
+    def decorator(wrapped, instance, args, kws):
         """The decorator itself, assigns arguments as keyword-only and
         calculates sets for error checking.
 
@@ -59,11 +50,7 @@ def decorator_factory(*kw_only_parameters):
         if defaults is None:
             defaults = ()
         names_with_defaults = frozenset(names[len(names) - len(defaults):])
-        parameters = list(zip_longest(reversed(names), reversed(defaults),
-                                         fillvalue=no_default))
-        parameters.reverse()
-        parameters = tuple(parameters)
-        names = frozenset(names)
+        names_to_defaults = dict(zip(reversed(names), reversed(defaults)))
         if kw_only_parameters:
             kw_only_names = frozenset(kw_only_parameters)
         else:
@@ -89,17 +76,17 @@ def decorator_factory(*kw_only_parameters):
 
             new_args = []
             args_index = 0
-            for name, default in parameters:
+            for name in names:
                 if name in kws:
                     # Check first if there's a bound keyword for this name
                     new_args.append(kws.pop(name))
                 elif name in kw_only_names:
                     # If this name is keyword-only, check for a
                     # default or raise.
-                    if default is not no_default:
-                        new_args.append(default)
+                    if name in names_to_defaults:
+                        new_args.append(names_to_defaults[name])
                     else:
-                        _wrong_args(wrapped, parameters, 
+                        _wrong_args(wrapped, names, 
                                     kw_only_names -
                                     (names_with_defaults | frozenset(kws)),
                                     'keyword-only')
@@ -107,13 +94,14 @@ def decorator_factory(*kw_only_parameters):
                     # Check for a positional arg.
                     new_args.append(args[args_index])
                     args_index += 1
-                elif default is not no_default:
+                elif name in names_to_defaults:
                     # Check for a default value.
-                    new_args.append(default)
+                    new_args.append(names_to_defaults[name])
                 else:
                     # No positional arg or default for this name so raise.
-                    _wrong_args(wrapped, parameters,
-                                names - (names_with_defaults | frozenset(kws)),
+                    _wrong_args(wrapped, names,
+                                frozenset(names) -
+                                (names_with_defaults | frozenset(kws)),
                                 'positional', len(args))
 
             if args_index != len(args) and not varargs:
@@ -126,7 +114,7 @@ def decorator_factory(*kw_only_parameters):
                      len(names) - len(names_with_defaults | frozenset(kws)),
                      len(args)))
             else:
-                # Pass the rest of the positional args
+                # Pass the rest of the positional args, if any.
                 new_args.extend(args[args_index:])
 
             return wrapped(*new_args, **kws)
@@ -135,9 +123,9 @@ def decorator_factory(*kw_only_parameters):
     return decorator
 
 
-def _wrong_args(wrapped, parameters, missing_args, arg_type, number_of_args=0):
+def _wrong_args(wrapped, names, missing_args, arg_type, number_of_args=0):
     """ Raise Python 3-style TypeErrors for missing arguments."""
-    ordered_args = [a for a, _ in parameters if a in missing_args]
+    ordered_args = [a for a in names if a in missing_args]
     ordered_args = ordered_args[number_of_args:]
     error_message = ['%s() missing %d required %s argument' % 
                      (wrapped.__name__, len(ordered_args), arg_type)]
