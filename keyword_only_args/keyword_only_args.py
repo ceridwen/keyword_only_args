@@ -13,11 +13,11 @@ def decorator_factory(*kw_only_parameters):
     keyword-only arguments.
 
     Call this decorator as @decorator_factory() for the default mode,
-    which makes all keyword arguments keyword-only, or with the names
-    of arguments to make keyword-only.  They must correspond with the
-    names of arguments in the decorated function.  It works by
-    collecting all the arguments into *args and **kws, then moving the
-    arguments marked as keyword-only from **kws into *args.
+    which makes all arguments with defaults keyword-only, or with the
+    names of arguments to make keyword-only.  They must correspond
+    with the names of arguments in the decorated function.  It works
+    by collecting all the arguments into *args and **kws, then moving
+    the arguments marked as keyword-only from **kws into *args.
 
     Args:
       *kw_only_parameters: Keyword-only arguments as strings.
@@ -27,8 +27,7 @@ def decorator_factory(*kw_only_parameters):
       arguments.
 
     """
-    @wrapt.decorator
-    def decorator(wrapped, instance, args, kws):
+    def decorator(wrapped):
         """The decorator itself, assigns arguments as keyword-only and
         calculates sets for error checking.
 
@@ -56,8 +55,8 @@ def decorator_factory(*kw_only_parameters):
         else:
             kw_only_names = names_with_defaults.copy()
 
-        @functools.wraps(wrapped)
-        def wrapper(*args, **kws):
+        @wrapt.decorator
+        def wrapper(wrapped, instance, args, kws):
             """Wrapper function, checks arguments with set operations, moves args
             from **kws into *args, and then calls wrapped().
 
@@ -118,7 +117,7 @@ def decorator_factory(*kw_only_parameters):
                 new_args.extend(args[args_index:])
 
             return wrapped(*new_args, **kws)
-        return wrapper
+        return wrapper(wrapped)
 
     return decorator
 

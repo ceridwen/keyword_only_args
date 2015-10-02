@@ -25,8 +25,8 @@ def f(a, b, c='c', d='d', *args, **kws):
 
 This will make b and c keyword-only, with no default for b.
 
-When called without arguments, the decorator will make all keyword
-arguments keyword-only:
+When called without arguments, the decorator will make all arguments
+with default values keyword-only:
 
 ````Python
 @keyword_only_args()
