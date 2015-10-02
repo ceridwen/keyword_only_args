@@ -8,8 +8,8 @@ setup(
     author = 'Ceridwen',
     author_email = 'ceridwenv@gmail.com',
     license = 'MIT',
-    url = 'https://github.com/ceridwenv/keyword_only_args',
-    download_url = 'https://github.com/ceridwenv/keyword_only_args/tarball/1.0',
+    url = 'https://github.com/ceridwen/keyword_only_args',
+    download_url = 'https://github.com/ceridwen/keyword_only_args/tarball/1.0',
     keywords = ['arguments', 'decorator', 'keyword', 'keyword_only'],
     classifiers = [
         'Development Status :: 5 - Production/Stable',
