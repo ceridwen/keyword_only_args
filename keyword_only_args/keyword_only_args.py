@@ -48,12 +48,11 @@ def decorator_factory(*kw_only_parameters):
         # rather than an empty iterable for some reason.
         if defaults is None:
             defaults = ()
-        names_with_defaults = frozenset(names[len(names) - len(defaults):])
-        names_to_defaults = dict(zip(reversed(names), reversed(defaults)))
+        names_defaults = dict(zip(reversed(names), reversed(defaults)))
         if kw_only_parameters:
             kw_only_names = frozenset(kw_only_parameters)
         else:
-            kw_only_names = names_with_defaults.copy()
+            kw_only_names = frozenset(names_defaults)
 
         @wrapt.decorator
         def wrapper(wrapped, instance, args, kws):
@@ -82,25 +81,25 @@ def decorator_factory(*kw_only_parameters):
                 elif name in kw_only_names:
                     # If this name is keyword-only, check for a
                     # default or raise.
-                    if name in names_to_defaults:
-                        new_args.append(names_to_defaults[name])
+                    if name in names_defaults:
+                        new_args.append(names_defaults[name])
                     else:
                         _wrong_args(wrapped, names, 
                                     kw_only_names -
-                                    (names_with_defaults | frozenset(kws)),
+                                    (names_defaults.keys() | kws),
                                     'keyword-only')
                 elif args_index < len(args):
                     # Check for a positional arg.
                     new_args.append(args[args_index])
                     args_index += 1
-                elif name in names_to_defaults:
+                elif name in names_defaults:
                     # Check for a default value.
-                    new_args.append(names_to_defaults[name])
+                    new_args.append(names_defaults[name])
                 else:
                     # No positional arg or default for this name so raise.
                     _wrong_args(wrapped, names,
                                 frozenset(names) -
-                                (names_with_defaults | frozenset(kws)),
+                                (names_defaults.keys() | kws),
                                 'positional', len(args))
 
             if args_index != len(args) and not varargs:
@@ -110,7 +109,7 @@ def decorator_factory(*kw_only_parameters):
                 raise TypeError(
                     '%s() takes %d positional arguments but %d were given' %
                     (wrapped.__name__,
-                     len(names) - len(names_with_defaults | frozenset(kws)),
+                     len(names) - len(names_defaults.keys() | kws),
                      len(args)))
             else:
                 # Pass the rest of the positional args, if any.
